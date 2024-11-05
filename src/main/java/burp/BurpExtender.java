@@ -46,11 +46,11 @@ public class BurpExtender implements IBurpExtender, IHttpListener {
         if (Signing.enabledForTool(toolFlag)) {
             // if there is no active key, do not sign this request
             if (Signing.callbacks.loadExtensionSetting("ActiveKey") == null) {
-                Signing.log("[DOM] Skipped because active key is null");
+                Signing.logError("[DOM][ERROR] Skipped because active key is null!");
                 return;
             }
 
-            Signing.log("[DOM] Process request");
+            Signing.log("[DOM] Process requests.");
             IRequestInfo request = helpers.analyzeRequest(messageInfo.getRequest());
             java.util.List<String> headers = request.getHeaders();
             String profileValues = Signing.callbacks.loadExtensionSetting("ActiveKey");

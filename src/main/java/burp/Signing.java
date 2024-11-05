@@ -9,7 +9,10 @@ import org.tomitribe.auth.signatures.PEM;
 import org.tomitribe.auth.signatures.Signature;
 import org.tomitribe.auth.signatures.Signer;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -19,6 +22,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.spec.InvalidKeySpecException;
+import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -38,9 +42,10 @@ public class Signing {
 
     /**
      * This method checks whether this extension is enabled for the Burp Suite tool
+     *
      * @param toolFlag The <code>IBurpExtenderCallbacks</code> tool to check if this extension is enabled in the settings
      * @return Returns true if the extension is enabled for this tool, false if not.
-     *         The extension is enabled by default for Repeater, Intruder, and Scanner.
+     * The extension is enabled by default for Repeater, Intruder, and Scanner.
      */
     public static boolean enabledForTool(int toolFlag) {
         if (toolFlag == IBurpExtenderCallbacks.TOOL_PROXY) {
@@ -74,6 +79,7 @@ public class Signing {
 
     /**
      * This method signs the request.
+     *
      * @param messageInfo This parameter contains the request to sign.
      * @return The signed request.
      */
@@ -140,7 +146,7 @@ public class Signing {
         log("DEBUG: Encoded URL : " + url);
 
         // Hack for OCI
-        if ( url.contains("oraclecloud.com/") ) {
+        if (url.contains("oraclecloud.com/")) {
             url = url.replaceAll(":", "%3A");
         }
         // we need some additional URL encoding for specific characters
@@ -226,7 +232,8 @@ public class Signing {
 
     /**
      * Logging a message for debugging purposes to stdout. Only logs when DEBUG is set to true.
-     * @param message   The message to be logged
+     *
+     * @param message The message to be logged
      */
     static void log(String message) {
         if (DEBUG) {
@@ -234,9 +241,17 @@ public class Signing {
         }
     }
 
+    static void logError(String message) {
+        Format formatter = new SimpleDateFormat("HH:mm:ss");
+        String s = formatter.format(new Date());
+        String m = String.format("[%s]%s", s, message);
+        callbacks.printError(m);
+    }
+
     /**
      * Logging an error message for debugging purposes to stderr.
-     * @param message   The message to be logged
+     *
+     * @param message The message to be logged
      */
     public static void err(String message) {
         callbacks.printError(message);
@@ -253,11 +268,14 @@ public class Signing {
     private static PrivateKey loadPrivateKey(String privateKeyFilename) {
         try (InputStream privateKeyStream = Files.newInputStream(Paths.get(privateKeyFilename))) {
             PrivateKey pk = PEM.readPrivateKey(privateKeyStream);
-            log("[DOM] Private key loaded from file '" + privateKeyFilename + "'.");
+            String msg = String.format("[DOM] Private key loaded: Algorithm is '%s' / Format is '%s' / File is '%s'.", pk.getAlgorithm(), pk.getFormat(), privateKeyFilename);
+            log(msg);
             return pk;
         } catch (InvalidKeySpecException e) {
+            logError("[DOM][ERROR] Invalid format for private key: " + e.getMessage());
             throw new RuntimeException("Invalid format for private key");
         } catch (IOException e) {
+            logError("[DOM][ERROR] Failed to load private key: " + e.getMessage());
             throw new RuntimeException("Failed to load private key");
         }
     }
@@ -298,8 +316,9 @@ public class Signing {
 
         /**
          * Create a List from a string using the default StringTokenizer delimiter set (" \t\n\r\f")
-         * @param input_string   The string to convert to a List
-         * @return               The converted string in a List format
+         *
+         * @param input_string The string to convert to a List
+         * @return The converted string in a List format
          */
         private List stringToList(String input_string) {
             List<String> list = new ArrayList<String>();
@@ -316,7 +335,7 @@ public class Signing {
          * @param apiKey     The identifier for a key uploaded through the console.
          * @param privateKey The private key that matches the uploaded public key for the given apiKey.
          * @param method     HTTP verb for this signer
-         * @return           Signer
+         * @return Signer
          */
         protected Signer buildSigner(String apiKey, Key privateKey, String method) {
             final Signature signature = new Signature(
@@ -334,11 +353,11 @@ public class Signing {
          * <li>Set the request's Authorization header to the computed signature.</li>
          * </ol>
          *
-         * @param request The request to sign
+         * @param request     The request to sign
          * @param header_name The header name for the signature
          */
         public void signRequest(HttpRequestBase request, String header_name) {
-            log("[DOM] Call to signRequest");
+            log("[DOM] Sign requests.");
             final String method = request.getMethod().toLowerCase();
             // nothing to sign for options
             if (method.equals("options")) {
@@ -373,17 +392,17 @@ public class Signing {
 
                 if (!request.containsHeader("content-length") ||
                         !request.containsHeader(globalSettings.getString("Digest Header Name").toLowerCase())) {
-                    
+
                     if (!request.containsHeader("content-length")) {
                         request.addHeader("content-length", Integer.toString(body.length));
                     }
                 }
 
                 // always recalculate the digest for POST/PUT requests
-                if (globalSettings.getString("Digest Header Name").toLowerCase().equals("x-content-sha256") ) {
+                if (globalSettings.getString("Digest Header Name").toLowerCase().equals("x-content-sha256")) {
                     request.setHeader("x-content-sha256", calculateSHA256(body));
                 } else {
-                    request.setHeader("digest", "SHA-256="+calculateSHA256(body));
+                    request.setHeader("digest", "SHA-256=" + calculateSHA256(body));
                 }
 
             }
@@ -403,7 +422,7 @@ public class Signing {
          * Extract path and query string to build the (request-target) pseudo-header.
          * For the URI "http://www.host.com/somePath?foo=bar" return "/somePath?foo=bar"
          *
-         * @param uri The URI to extract the path
+         * @param uri          The URI to extract the path
          * @param includeQuery If true include the query parameters (e.g. "?foo=bar"), if false do not include query params
          */
         private static String extractPath(URI uri, boolean includeQuery) {
@@ -437,7 +456,7 @@ public class Signing {
                             header -> header,
                             header -> {
                                 if (!request.containsHeader(header)) {
-                                    log(String.format("[DOM][ERROR] Expected one value for header '%s' ==> signature skipped!", header));
+                                    logError(String.format("[DOM][ERROR] Expected one value for header '%s' ==> signature skipped!", header));
                                     throw new MissingRequiredHeaderException(header);
                                 }
                                 if (request.getHeaders(header).length > 1) {
@@ -449,7 +468,7 @@ public class Signing {
                                 // Some implementations such as Nextcloud Social do not include the port in the signature
                                 // calculation.
                                 if (header.equalsIgnoreCase("host") &&
-                                        (request.getFirstHeader(header).getValue().indexOf(':') > -1 ) &&
+                                        (request.getFirstHeader(header).getValue().indexOf(':') > -1) &&
                                         globalSettings.getString("Include the port in Signature").equalsIgnoreCase("false")) {
                                     // remove the port after the hostname, e.g. localhost:8080 -> localhost
                                     return request.getFirstHeader(header).getValue().split(":")[0];
@@ -482,7 +501,7 @@ public class Signing {
          * Calculate the Base64-encoded string representing the SHA256 of a request body
          *
          * @param body The request body to hash
-         * @return     The Base64-encoded SHA256 hash (empty string if NoSuchAlgorithmException)
+         * @return The Base64-encoded SHA256 hash (empty string if NoSuchAlgorithmException)
          */
         private String calculateSHA256(byte[] body) {
             try {
