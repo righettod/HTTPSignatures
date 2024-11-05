@@ -253,7 +253,7 @@ public class Signing {
     private static PrivateKey loadPrivateKey(String privateKeyFilename) {
         try (InputStream privateKeyStream = Files.newInputStream(Paths.get(privateKeyFilename))) {
             PrivateKey pk = PEM.readPrivateKey(privateKeyStream);
-            log("[XLM] Private key loaded from file '" + privateKeyFilename + "'.");
+            log("[DOM] Private key loaded from file '" + privateKeyFilename + "'.");
             return pk;
         } catch (InvalidKeySpecException e) {
             throw new RuntimeException("Invalid format for private key");
@@ -338,7 +338,7 @@ public class Signing {
          * @param header_name The header name for the signature
          */
         public void signRequest(HttpRequestBase request, String header_name) {
-            log("[XLM] Call to signRequest");
+            log("[DOM] Call to signRequest");
             final String method = request.getMethod().toLowerCase();
             // nothing to sign for options
             if (method.equals("options")) {
@@ -437,7 +437,7 @@ public class Signing {
                             header -> header,
                             header -> {
                                 if (!request.containsHeader(header)) {
-                                    log(String.format("[XLM][ERROR] Expected one value for header '%s' ==> signature skipped!", header));
+                                    log(String.format("[DOM][ERROR] Expected one value for header '%s' ==> signature skipped!", header));
                                     throw new MissingRequiredHeaderException(header);
                                 }
                                 if (request.getHeaders(header).length > 1) {
