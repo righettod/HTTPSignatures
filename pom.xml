@@ -8,6 +8,7 @@
     <version>1.0-SNAPSHOT</version>
     <name>HTTPSignatures</name>
     <build>
+        <finalName>HTTPSignatures</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
