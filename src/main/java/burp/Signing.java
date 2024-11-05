@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 
 public class Signing {
 
-    static boolean DEBUG = false;
+    static boolean DEBUG = true;
     public static IBurpExtenderCallbacks callbacks;
     public static IExtensionHelpers helpers;
     static ConfigSettings globalSettings;
@@ -252,7 +252,9 @@ public class Signing {
      */
     private static PrivateKey loadPrivateKey(String privateKeyFilename) {
         try (InputStream privateKeyStream = Files.newInputStream(Paths.get(privateKeyFilename))) {
-            return PEM.readPrivateKey(privateKeyStream);
+            PrivateKey pk = PEM.readPrivateKey(privateKeyStream);
+            log("[XLM] Private key loaded from file '" + privateKeyFilename + "'.");
+            return pk;
         } catch (InvalidKeySpecException e) {
             throw new RuntimeException("Invalid format for private key");
         } catch (IOException e) {
@@ -336,6 +338,7 @@ public class Signing {
          * @param header_name The header name for the signature
          */
         public void signRequest(HttpRequestBase request, String header_name) {
+            log("[XLM] Call to signRequest");
             final String method = request.getMethod().toLowerCase();
             // nothing to sign for options
             if (method.equals("options")) {

@@ -44,12 +44,13 @@ public class BurpExtender implements IBurpExtender, IHttpListener {
 
         // Check if this extension is enabled for the current Burp tool request
         if (Signing.enabledForTool(toolFlag)) {
-
             // if there is no active key, do not sign this request
             if (Signing.callbacks.loadExtensionSetting("ActiveKey") == null) {
+                Signing.log("[XLM] Skipped because active key is null");
                 return;
             }
 
+            Signing.log("[XLM] Process request");
             IRequestInfo request = helpers.analyzeRequest(messageInfo.getRequest());
             java.util.List<String> headers = request.getHeaders();
             String profileValues = Signing.callbacks.loadExtensionSetting("ActiveKey");
@@ -58,9 +59,11 @@ public class BurpExtender implements IBurpExtender, IHttpListener {
             String header = valuesParts[0].toLowerCase();
 
             // Process only requests containing an HTTP header starting with the configured header name (e.g. Authorization, Signature)
-            if (headers.stream().anyMatch((str -> str.trim().toLowerCase().contains(header)))) {
-                messageInfo.setRequest(Signing.signRequest(messageInfo));
-            }
+            messageInfo.setRequest(Signing.signRequest(messageInfo));
+            //if (headers.stream().anyMatch((str -> str.trim().toLowerCase().contains(header)))) {
+            //    Signing.log("[XLM] Sign request");
+            //    messageInfo.setRequest(Signing.signRequest(messageInfo));
+            //}
         }
     }
 }
