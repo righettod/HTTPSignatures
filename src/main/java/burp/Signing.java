@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 
 public class Signing {
 
-    static boolean DEBUG = true;
+    static boolean DEBUG = false;
     public static IBurpExtenderCallbacks callbacks;
     public static IExtensionHelpers helpers;
     static ConfigSettings globalSettings;
