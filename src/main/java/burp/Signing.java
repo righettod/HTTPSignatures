@@ -437,6 +437,7 @@ public class Signing {
                             header -> header,
                             header -> {
                                 if (!request.containsHeader(header)) {
+                                    log(String.format("[XLM][ERROR] Expected one value for header '%s' ==> signature skipped!", header));
                                     throw new MissingRequiredHeaderException(header);
                                 }
                                 if (request.getHeaders(header).length > 1) {
