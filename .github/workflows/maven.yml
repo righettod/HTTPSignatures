@@ -1,5 +1,4 @@
 name: build-artifact
-
 on:
   workflow_dispatch:
   push:
