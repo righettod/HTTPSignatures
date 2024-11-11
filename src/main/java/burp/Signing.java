@@ -4,10 +4,7 @@ import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.*;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.StringEntity;
-import org.tomitribe.auth.signatures.MissingRequiredHeaderException;
-import org.tomitribe.auth.signatures.PEM;
-import org.tomitribe.auth.signatures.Signature;
-import org.tomitribe.auth.signatures.Signer;
+import org.tomitribe.auth.signatures.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -21,10 +18,14 @@ import java.security.Key;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.MGF1ParameterSpec;
+import java.security.spec.PSSParameterSpec;
 import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.Base64;
 import java.util.stream.Collectors;
 
 public class Signing {
@@ -285,7 +286,7 @@ public class Signing {
      */
     public static class RequestSigner {
         private static final SimpleDateFormat DATE_FORMAT;
-        private static final String SIGNATURE_ALGORITHM = "rsa-sha256";
+        private static final String SIGNATURE_ALGORITHM = ConfigSettings.SIGNATURE_ALGORITHM.trim();
         private Map<String, List<String>> REQUIRED_HEADERS;
 
         static {
@@ -338,8 +339,13 @@ public class Signing {
          * @return Signer
          */
         protected Signer buildSigner(String apiKey, Key privateKey, String method) {
-            final Signature signature = new Signature(
-                    apiKey, SIGNATURE_ALGORITHM, null, REQUIRED_HEADERS.get(method.toLowerCase()));
+            Signature signature;
+            if ("hs2019".equalsIgnoreCase(SIGNATURE_ALGORITHM)) {
+                AlgorithmParameterSpec spec = new PSSParameterSpec("SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 32, 1);
+                signature = new Signature(apiKey, SigningAlgorithm.HS2019, Algorithm.RSA_PSS, spec, null, REQUIRED_HEADERS.get(method.toLowerCase()));
+            } else {
+                signature = new Signature(apiKey, SIGNATURE_ALGORITHM, null, REQUIRED_HEADERS.get(method.toLowerCase()));
+            }
             return new Signer(privateKey, signature);
         }
 
@@ -409,7 +415,7 @@ public class Signing {
 
             final Map<String, String> headers = extractHeadersToSign(request);
             String signature = this.calculateSignature(method, path, headers);
-            //log("DEBUG: signed signature: " + signature);
+            log("[DOM] Generated signature: " + signature);
 
             if (header_name.equalsIgnoreCase("Signature") && signature.startsWith("Signature ")) {
                 // remove "Signature" from the beginning of the string as we use "Signature" as the header name
@@ -451,7 +457,7 @@ public class Signing {
             }
             return headersToSign.stream()
                     // (request-target) is a pseudo-header
-                    .filter(header -> !header.toLowerCase().equals("(request-target)"))
+                    .filter(header -> !header.toLowerCase().equals("(request-target)") && !header.toLowerCase().equals("(created)"))
                     .collect(Collectors.toMap(
                             header -> header,
                             header -> {

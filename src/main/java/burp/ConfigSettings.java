@@ -3,6 +3,8 @@ package burp;
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import java.awt.*;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
@@ -13,6 +15,7 @@ import java.util.LinkedHashMap;
 import static burp.Signing.log;
 
 public class ConfigSettings {
+    public static String SIGNATURE_ALGORITHM = "rsa-sha256";
     public LinkedHashMap<String, String> settings; // key is e.g. "Header", value is "Authorization"
     // profiles: key is the name of the Tab, value is a settings LinkedHashMap
     private LinkedHashMap<String, LinkedHashMap<String, String>> profiles;
@@ -23,6 +26,8 @@ public class ConfigSettings {
     JCheckBox checkBoxToolScanner = new JCheckBox("Scanner");
     JCheckBox checkBoxToolIntruder = new JCheckBox("Intruder");
     JCheckBox checkBoxToolRepeater = new JCheckBox("Repeater");
+    JCheckBox useHS2019Signature = new JCheckBox("HS2019");
+    JCheckBox useRSASHA256Signature = new JCheckBox("RSA-SHA256");
     private boolean tabChangeListenerLock = false;
 
     ConfigSettings() {
@@ -83,7 +88,8 @@ public class ConfigSettings {
 
     /**
      * Return the Burp frame used for the option dialog and the menu button
-     * @return  The Burp Suite frame
+     *
+     * @return The Burp Suite frame
      */
     static JFrame getBurpFrame() {
         for (Frame f : Frame.getFrames()) {
@@ -96,8 +102,9 @@ public class ConfigSettings {
 
     /**
      * Get the value from a key/profile setting (e.g. "keyId") from the active profile
-     * @param key   The key to retrieve
-     * @return      The value for the key belonging to the active profile
+     *
+     * @param key The key to retrieve
+     * @return The value for the key belonging to the active profile
      */
     public String getString(String key) {
         return profiles.get("ActiveKey").get(key);
@@ -117,6 +124,41 @@ public class ConfigSettings {
         titleGlobalConfig.setForeground(Color.ORANGE);
         titleGlobalConfig.setFont(titleGlobalConfig.getFont().deriveFont(Font.BOLD, titleGlobalConfig.getFont().getSize() + 4));
         globalPanel.add(titleGlobalConfig);
+        //Signature algo
+        JLabel labelSignatureAlgo = new JLabel("Signature algorithm:");
+        Font labelSigFont = labelSignatureAlgo.getFont();
+        labelSignatureAlgo.setFont(labelSigFont.deriveFont(labelSigFont.getStyle() | Font.BOLD)); // make text bold
+        globalPanel.add(labelSignatureAlgo);
+        if ((Signing.callbacks.loadExtensionSetting("useHS2019Signature") != null) &&
+                Signing.callbacks.loadExtensionSetting("useHS2019Signature").equals("true")) {
+            useHS2019Signature.setSelected(true);
+            useRSASHA256Signature.setSelected(false);
+            ConfigSettings.SIGNATURE_ALGORITHM = "hs2019";
+        } else {
+            useHS2019Signature.setSelected(false);
+            useRSASHA256Signature.setSelected(true);
+            ConfigSettings.SIGNATURE_ALGORITHM = "rsa-sha256";
+        }
+        useHS2019Signature.addItemListener(new ItemListener() {
+            @Override
+            public void itemStateChanged(ItemEvent e) {
+                if(e.getStateChange() == ItemEvent.SELECTED){
+                    ConfigSettings.this.useRSASHA256Signature.setSelected(false);
+                    ConfigSettings.SIGNATURE_ALGORITHM = "hs2019";
+                }
+            }
+        });
+        useRSASHA256Signature.addItemListener(new ItemListener() {
+            @Override
+            public void itemStateChanged(ItemEvent e) {
+                if(e.getStateChange() == ItemEvent.SELECTED){
+                    ConfigSettings.this.useHS2019Signature.setSelected(false);
+                    ConfigSettings.SIGNATURE_ALGORITHM = "rsa-sha256";
+                }
+            }
+        });
+        globalPanel.add(useHS2019Signature);
+        globalPanel.add(useRSASHA256Signature);
         // Checkboxes to enable/disable the extension for each Burp Suite tool
         JLabel labelTools = new JLabel("Enable the extension for the following Burp Suite tools:");
         Font labelToolsFont = labelTools.getFont();
@@ -173,7 +215,8 @@ public class ConfigSettings {
                 // the user clicks on the label
                 try {
                     Desktop.getDesktop().browse(new URI("https://github.com/nccgroup/HTTPSignatures"));
-                } catch (IOException | URISyntaxException e1) {}
+                } catch (IOException | URISyntaxException e1) {
+                }
             }
 
             @Override
@@ -248,11 +291,12 @@ public class ConfigSettings {
 
     /**
      * Make a ProfileTab active
-     * @param profileTab   The ProfileTab to set active
+     *
+     * @param profileTab The ProfileTab to set active
      */
     private void setActiveProfile(ProfileTab profileTab) {
         String tabName = profileTab.profileTabHandle.tabNameField.getText();
-        tabName.replaceAll(";",""); // remove semicolons
+        tabName.replaceAll(";", ""); // remove semicolons
         log("Setting active profile to '" + tabName + "' active");
 
         LinkedHashMap<String, Object> newProfile = profileTab.getNewProfile();
@@ -265,7 +309,7 @@ public class ConfigSettings {
             }
             Object val = newProfile.get(key);
             String valStr = ((JTextField) val).getText();
-            profileValues += valStr.replaceAll(";",""); // remove semicolons
+            profileValues += valStr.replaceAll(";", ""); // remove semicolons
             newProfile2.put(key, valStr);
             log("Setting active profile " + tabName + ": key: " + key + " value: " + valStr);
         }
@@ -299,7 +343,7 @@ public class ConfigSettings {
             }
             LinkedHashMap<String, Object> newProfile = profileTab.getNewProfile();
             String tabName = profileTab.profileTabHandle.tabNameField.getText();
-            tabName = tabName.replaceAll(";",""); // remove semicolons
+            tabName = tabName.replaceAll(";", ""); // remove semicolons
 
             if (!tabNames.isEmpty()) {
                 // add semicolon, but not on first key
@@ -316,7 +360,7 @@ public class ConfigSettings {
                 }
                 Object val = newProfile.get(key);
                 String valStr = ((JTextField) val).getText();
-                valStr = valStr.replaceAll(";",""); // remove any semicolon
+                valStr = valStr.replaceAll(";", ""); // remove any semicolon
                 profileValues += valStr;
                 log("Saving profile " + tabName + ": key: " + key + " value: " + valStr);
             }
@@ -359,6 +403,11 @@ public class ConfigSettings {
             Signing.DEBUG = false;
             Signing.callbacks.saveExtensionSetting("debug", "false");
         }
+        if (useHS2019Signature.isSelected() || !useRSASHA256Signature.isSelected() || (!useRSASHA256Signature.isSelected() && !useHS2019Signature.isSelected())) {
+            Signing.callbacks.saveExtensionSetting("useHS2019Signature", "true");
+        } else {
+            Signing.callbacks.saveExtensionSetting("useHS2019Signature", "false");
+        }
     }
 
     /**
@@ -374,7 +423,8 @@ public class ConfigSettings {
 
     /**
      * Add a new (empty) tab
-     * @param tabName   the name of the new tab
+     *
+     * @param tabName the name of the new tab
      */
     private void addTab(String tabName) {
         tabChangeListenerLock = true;
@@ -387,9 +437,10 @@ public class ConfigSettings {
 
     /**
      * Add a new tab with content
-     * @param tabName    The name of the new tab
-     * @param tabConfig  The configuration of the new tab (values separated by semicolons)
-     * @param active     Boolean: true means the profile is active; false means the profile is not active
+     *
+     * @param tabName   The name of the new tab
+     * @param tabConfig The configuration of the new tab (values separated by semicolons)
+     * @param active    Boolean: true means the profile is active; false means the profile is not active
      */
     private void addTab(String tabName, String tabConfig, Boolean active) {
         tabChangeListenerLock = true;
@@ -416,8 +467,9 @@ public class ConfigSettings {
 
     /**
      * Checks if a color is bright or dark.
-     * @param color   The RGB color
-     * @return        True if bright, false if dark
+     *
+     * @param color The RGB color
+     * @return True if bright, false if dark
      */
     private boolean isColorBright(int color) {
         if (brightness(color) > 0.5) {
@@ -431,8 +483,9 @@ public class ConfigSettings {
      * Returns the brightness of a color.
      * Based on
      * https://chromium.googlesource.com/android_tools/+/18728e9dd5dd66d4f5edf1b792e77e2b544a1cb0/sdk/sources/android-19/android/graphics/Color.java#187
-     * @param color  The RGB color
-     * @return       A value between 0.0f and 1.0f
+     *
+     * @param color The RGB color
+     * @return A value between 0.0f and 1.0f
      */
     private float brightness(int color) {
         int r = (color >> 16) & 0xFF;
@@ -445,7 +498,8 @@ public class ConfigSettings {
 
     /**
      * Close a tab
-     * @param configTabContent   The tab to close
+     *
+     * @param configTabContent The tab to close
      */
     public void closeTab(JPanel configTabContent) {
         tabChangeListenerLock = true;
@@ -505,7 +559,7 @@ public class ConfigSettings {
                     continue;
                 }
                 String tabName = profileTab.profileTabHandle.tabNameField.getText();
-                if (tabName.equals(activeTabName) ) {
+                if (tabName.equals(activeTabName)) {
                     tabbedPane.setSelectedIndex(tabNum);
                 }
             }
