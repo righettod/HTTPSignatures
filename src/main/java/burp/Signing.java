@@ -286,7 +286,7 @@ public class Signing {
      */
     public static class RequestSigner {
         private static final SimpleDateFormat DATE_FORMAT;
-        private static final String SIGNATURE_ALGORITHM = ConfigSettings.SIGNATURE_ALGORITHM.trim();
+        //private static final String SIGNATURE_ALGORITHM = ConfigSettings.SIGNATURE_ALGORITHM.trim();
         private Map<String, List<String>> REQUIRED_HEADERS;
 
         static {
@@ -340,11 +340,11 @@ public class Signing {
          */
         protected Signer buildSigner(String apiKey, Key privateKey, String method) {
             Signature signature;
-            if ("hs2019".equalsIgnoreCase(SIGNATURE_ALGORITHM)) {
+            if ("hs2019".equalsIgnoreCase(ConfigSettings.SIGNATURE_ALGORITHM.trim())) {
                 AlgorithmParameterSpec spec = new PSSParameterSpec("SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 32, 1);
                 signature = new Signature(apiKey, SigningAlgorithm.HS2019, Algorithm.RSA_PSS, spec, null, REQUIRED_HEADERS.get(method.toLowerCase()));
             } else {
-                signature = new Signature(apiKey, SIGNATURE_ALGORITHM, null, REQUIRED_HEADERS.get(method.toLowerCase()));
+                signature = new Signature(apiKey, ConfigSettings.SIGNATURE_ALGORITHM.trim(), null, REQUIRED_HEADERS.get(method.toLowerCase()));
             }
             return new Signer(privateKey, signature);
         }
@@ -410,7 +410,17 @@ public class Signing {
                 } else {
                     request.setHeader("digest", "SHA-256=" + calculateSHA256(body));
                 }
+            }
 
+            //If request is GET and the recent version of HTTP signature is used then add the digest of an empty string
+            if(method.equalsIgnoreCase("get") && ConfigSettings.SIGNATURE_ALGORITHM.equalsIgnoreCase("hs2019")){
+                log("[DOM] Add the digest of an empty string.");
+                byte[] body = "".getBytes(StandardCharsets.UTF_8);
+                if (globalSettings.getString("Digest Header Name").toLowerCase().equals("x-content-sha256")) {
+                    request.setHeader("x-content-sha256", calculateSHA256(body));
+                } else {
+                    request.setHeader("digest", "SHA-256=" + calculateSHA256(body));
+                }
             }
 
             final Map<String, String> headers = extractHeadersToSign(request);

@@ -134,10 +134,12 @@ public class ConfigSettings {
             useHS2019Signature.setSelected(true);
             useRSASHA256Signature.setSelected(false);
             ConfigSettings.SIGNATURE_ALGORITHM = "hs2019";
+            log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
         } else {
             useHS2019Signature.setSelected(false);
             useRSASHA256Signature.setSelected(true);
             ConfigSettings.SIGNATURE_ALGORITHM = "rsa-sha256";
+            log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
         }
         useHS2019Signature.addItemListener(new ItemListener() {
             @Override
@@ -145,6 +147,7 @@ public class ConfigSettings {
                 if(e.getStateChange() == ItemEvent.SELECTED){
                     ConfigSettings.this.useRSASHA256Signature.setSelected(false);
                     ConfigSettings.SIGNATURE_ALGORITHM = "hs2019";
+                    log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
                 }
             }
         });
@@ -154,6 +157,7 @@ public class ConfigSettings {
                 if(e.getStateChange() == ItemEvent.SELECTED){
                     ConfigSettings.this.useHS2019Signature.setSelected(false);
                     ConfigSettings.SIGNATURE_ALGORITHM = "rsa-sha256";
+                    log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
                 }
             }
         });
