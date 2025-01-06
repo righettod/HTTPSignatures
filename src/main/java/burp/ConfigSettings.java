@@ -15,7 +15,8 @@ import java.util.LinkedHashMap;
 import static burp.Signing.log;
 
 public class ConfigSettings {
-    public static String SIGNATURE_ALGORITHM = "rsa-sha256";
+    public static SignatureMode SIGNATURE_MODE = SignatureMode.RSASHA256;
+    public static String SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
     public LinkedHashMap<String, String> settings; // key is e.g. "Header", value is "Authorization"
     // profiles: key is the name of the Tab, value is a settings LinkedHashMap
     private LinkedHashMap<String, LinkedHashMap<String, String>> profiles;
@@ -28,6 +29,7 @@ public class ConfigSettings {
     JCheckBox checkBoxToolRepeater = new JCheckBox("Repeater");
     JCheckBox useHS2019Signature = new JCheckBox("HS2019");
     JCheckBox useRSASHA256Signature = new JCheckBox("RSA-SHA256");
+    JCheckBox useJWSSignature = new JCheckBox("JSON Web Signature");
     private boolean tabChangeListenerLock = false;
 
     ConfigSettings() {
@@ -129,24 +131,38 @@ public class ConfigSettings {
         Font labelSigFont = labelSignatureAlgo.getFont();
         labelSignatureAlgo.setFont(labelSigFont.deriveFont(labelSigFont.getStyle() | Font.BOLD)); // make text bold
         globalPanel.add(labelSignatureAlgo);
-        if ((Signing.callbacks.loadExtensionSetting("useHS2019Signature") != null) &&
-                Signing.callbacks.loadExtensionSetting("useHS2019Signature").equals("true")) {
+        if ((Signing.callbacks.loadExtensionSetting("useHS2019Signature") != null) && Signing.callbacks.loadExtensionSetting("useHS2019Signature").equals("true")) {
             useHS2019Signature.setSelected(true);
             useRSASHA256Signature.setSelected(false);
-            ConfigSettings.SIGNATURE_ALGORITHM = "hs2019";
+            useJWSSignature.setSelected(false);
+            ConfigSettings.SIGNATURE_MODE = SignatureMode.HS2019;
+            ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
             log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
-        } else {
-            useHS2019Signature.setSelected(false);
+        }
+        if ((Signing.callbacks.loadExtensionSetting("useRSASHA256Signature") != null) && Signing.callbacks.loadExtensionSetting("useRSASHA256Signature").equals("true")) {
             useRSASHA256Signature.setSelected(true);
-            ConfigSettings.SIGNATURE_ALGORITHM = "rsa-sha256";
+            useHS2019Signature.setSelected(false);
+            useJWSSignature.setSelected(false);
+            ConfigSettings.SIGNATURE_MODE = SignatureMode.RSASHA256;
+            ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
+            log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
+        }
+        if ((Signing.callbacks.loadExtensionSetting("useJWSSignature") != null) && Signing.callbacks.loadExtensionSetting("useJWSSignature").equals("true")) {
+            useJWSSignature.setSelected(true);
+            useRSASHA256Signature.setSelected(false);
+            useHS2019Signature.setSelected(false);
+            ConfigSettings.SIGNATURE_MODE = SignatureMode.JWS;
+            ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
             log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
         }
         useHS2019Signature.addItemListener(new ItemListener() {
             @Override
             public void itemStateChanged(ItemEvent e) {
-                if(e.getStateChange() == ItemEvent.SELECTED){
+                if (e.getStateChange() == ItemEvent.SELECTED) {
                     ConfigSettings.this.useRSASHA256Signature.setSelected(false);
-                    ConfigSettings.SIGNATURE_ALGORITHM = "hs2019";
+                    ConfigSettings.this.useJWSSignature.setSelected(false);
+                    ConfigSettings.SIGNATURE_MODE = SignatureMode.HS2019;
+                    ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
                     log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
                 }
             }
@@ -154,15 +170,30 @@ public class ConfigSettings {
         useRSASHA256Signature.addItemListener(new ItemListener() {
             @Override
             public void itemStateChanged(ItemEvent e) {
-                if(e.getStateChange() == ItemEvent.SELECTED){
+                if (e.getStateChange() == ItemEvent.SELECTED) {
                     ConfigSettings.this.useHS2019Signature.setSelected(false);
-                    ConfigSettings.SIGNATURE_ALGORITHM = "rsa-sha256";
+                    ConfigSettings.this.useJWSSignature.setSelected(false);
+                    ConfigSettings.SIGNATURE_MODE = SignatureMode.RSASHA256;
+                    ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
+                    log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
+                }
+            }
+        });
+        useJWSSignature.addItemListener(new ItemListener() {
+            @Override
+            public void itemStateChanged(ItemEvent e) {
+                if (e.getStateChange() == ItemEvent.SELECTED) {
+                    ConfigSettings.this.useHS2019Signature.setSelected(false);
+                    ConfigSettings.this.useRSASHA256Signature.setSelected(false);
+                    ConfigSettings.SIGNATURE_MODE = SignatureMode.JWS;
+                    ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
                     log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
                 }
             }
         });
         globalPanel.add(useHS2019Signature);
         globalPanel.add(useRSASHA256Signature);
+        globalPanel.add(useJWSSignature);
         // Checkboxes to enable/disable the extension for each Burp Suite tool
         JLabel labelTools = new JLabel("Enable the extension for the following Burp Suite tools:");
         Font labelToolsFont = labelTools.getFont();
@@ -407,9 +438,19 @@ public class ConfigSettings {
             Signing.DEBUG = false;
             Signing.callbacks.saveExtensionSetting("debug", "false");
         }
-        if (useHS2019Signature.isSelected() || !useRSASHA256Signature.isSelected() || (!useRSASHA256Signature.isSelected() && !useHS2019Signature.isSelected())) {
+        if (useHS2019Signature.isSelected()) {
             Signing.callbacks.saveExtensionSetting("useHS2019Signature", "true");
-        } else {
+            Signing.callbacks.saveExtensionSetting("useRSASHA256Signature", "false");
+            Signing.callbacks.saveExtensionSetting("useJWSSignature", "false");
+        }
+        if (useRSASHA256Signature.isSelected()) {
+            Signing.callbacks.saveExtensionSetting("useRSASHA256Signature", "true");
+            Signing.callbacks.saveExtensionSetting("useHS2019Signature", "false");
+            Signing.callbacks.saveExtensionSetting("useJWSSignature", "false");
+        }
+        if (useJWSSignature.isSelected()) {
+            Signing.callbacks.saveExtensionSetting("useJWSSignature", "true");
+            Signing.callbacks.saveExtensionSetting("useRSASHA256Signature", "false");
             Signing.callbacks.saveExtensionSetting("useHS2019Signature", "false");
         }
     }

@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 
 public class Signing {
 
-    static boolean DEBUG = false;
+    static boolean DEBUG = true;
     public static IBurpExtenderCallbacks callbacks;
     public static IExtensionHelpers helpers;
     static ConfigSettings globalSettings;
@@ -413,7 +413,7 @@ public class Signing {
             }
 
             //If request is GET and the recent version of HTTP signature is used then add the digest of an empty string
-            if(method.equalsIgnoreCase("get") && ConfigSettings.SIGNATURE_ALGORITHM.equalsIgnoreCase("hs2019")){
+            if (method.equalsIgnoreCase("get") && ConfigSettings.SIGNATURE_ALGORITHM.equalsIgnoreCase("hs2019")) {
                 log("[DOM] Add the digest of an empty string.");
                 byte[] body = "".getBytes(StandardCharsets.UTF_8);
                 if (globalSettings.getString("Digest Header Name").toLowerCase().equals("x-content-sha256")) {
@@ -424,7 +424,18 @@ public class Signing {
             }
 
             final Map<String, String> headers = extractHeadersToSign(request);
-            String signature = this.calculateSignature(method, path, headers);
+            String signature;
+            if (ConfigSettings.SIGNATURE_MODE.equals(SignatureMode.JWS)) {
+                String digest;
+                if (request.getHeaders("digest").length > 0) {
+                    digest = request.getHeaders("digest")[0].getValue();
+                } else {
+                    digest = request.getHeaders("x-content-sha256")[0].getValue();
+                }
+                signature = this.calculateJWSSignature(method, path, headers, digest);
+            } else {
+                signature = this.calculateSignature(method, path, headers);
+            }
             log("[DOM] Generated signature: " + signature);
 
             if (header_name.equalsIgnoreCase("Signature") && signature.startsWith("Signature ")) {
@@ -502,16 +513,17 @@ public class Signing {
          * @param headers Headers to include in the signature.
          */
         private String calculateSignature(String method, String path, Map<String, String> headers) {
-            Signer signer = this.signers.get(method);
-            if (signer == null) {
-                throw new RuntimeException("Don't know how to sign method " + method);
-            }
             try {
+                Signer signer = this.signers.get(method);
+                if (signer == null) {
+                    throw new RuntimeException("Don't know how to sign method " + method);
+                }
                 return signer.sign(method, path, headers).toString();
             } catch (IOException e) {
                 throw new RuntimeException("Failed to generate signature", e);
             }
         }
+
 
         /**
          * Calculate the Base64-encoded string representing the SHA256 of a request body
@@ -556,6 +568,26 @@ public class Signing {
                 request.setEntity(new ByteArrayEntity(body));
             }
             return body;
+        }
+
+        /**
+         * Compute the JWS signature following the instructions<br>
+         * from the document "OpenFinance Framework - Implementation Guidelines - Protocol Functions and Security Measures".<br>
+         * See the section 6 of the document.
+         *
+         * @param method  Request method (GET, POST, ...)
+         * @param path    The path + query string for forming the (request-target) pseudo-header
+         * @param headers Headers to include in the signature.
+         * @param digest  Contains a Hash of the message body. If the message does not contain a body, it contain the hash of an empty byte list.
+         * @return The JWS token as string.
+         * @see "https://www.berlin-group.org/openfinance-downloads"
+         * @see "https://c2914bdb-1b7a-4d22-b792-c58ac5d6648e.usrfiles.com/ugd/c2914b_0bc6a7d6cd6641c5a4a430d09c50f2fd.pdf"
+         * @see "https://medium.com/syntaxa-tech-blog/open-banking-message-signing-b4ab4f7f92d1"
+         * @see "https://developer.revolut.com/docs/guides/build-banking-apps/tutorials/work-with-json-web-signatures"
+         */
+        private String calculateJWSSignature(String method, String path, Map<String, String> headers, String digest) {
+            //@TODO: Implements me
+            throw new UnsupportedOperationException("Not yet implemented!");
         }
     }
 }
