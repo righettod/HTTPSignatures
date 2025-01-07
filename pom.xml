@@ -36,10 +36,19 @@
             <artifactId>httpclient</artifactId>
             <version>4.5.13</version>
         </dependency>
+        <!-- For HTTP Message Signatures via RFC 9421 -->
+        <!-- https://github.com/tomitribe/http-signatures-java -->
         <dependency>
             <groupId>org.tomitribe</groupId>
             <artifactId>tomitribe-http-signatures</artifactId>
             <version>1.8</version>
+        </dependency>
+        <!-- For JWS Signature -->
+        <!-- https://connect2id.com/products/nimbus-jose-jwt -->
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+            <version>10.0.1</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/net.portswigger.burp.extender/burp-extender-api -->
         <dependency>

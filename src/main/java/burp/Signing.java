@@ -1,16 +1,20 @@
 package burp;
 
+import com.nimbusds.jose.*;
+import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jose.util.Base64URL;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.*;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.StringEntity;
 import org.tomitribe.auth.signatures.*;
+import org.tomitribe.auth.signatures.Algorithm;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.net.*;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -18,19 +22,30 @@ import java.security.Key;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PSSParameterSpec;
 import java.text.Format;
 import java.text.SimpleDateFormat;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.Base64;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class Signing {
 
-    static boolean DEBUG = true;
+    static boolean DEBUG = false;
+    static Map<String, X509Certificate> KEYID_CACHE = new ConcurrentHashMap<>();
     public static IBurpExtenderCallbacks callbacks;
     public static IExtensionHelpers helpers;
     static ConfigSettings globalSettings;
@@ -98,7 +113,8 @@ public class Signing {
         RequestSigner signer = new RequestSigner(keyId, privateKey);
 
         String url = requestInfo.getUrl().toString();
-        log(" --- NEW REQUEST ---\nDEBUG: Input URL   : " + url);
+        log("\n\n\n\n[NEW REQUEST]");
+        log("Input URL: " + url);
 
         String query = requestInfo.getUrl().getQuery();
         // URL decode to avoid double URL encoding later
@@ -120,7 +136,7 @@ public class Signing {
                     requestInfo.getUrl().getPath() + "?" +
                     query;
 
-            log("DEBUG: Decoded URL : " + url);
+            log("Decoded URL: " + url);
         }
 
         // Make sure the query is properly URL encoded
@@ -144,7 +160,7 @@ public class Signing {
             err("URI " + url + " is malformed");
         }
 
-        log("DEBUG: Encoded URL : " + url);
+        log("Encoded URL: " + url);
 
         // Hack for OCI
         if (url.contains("oraclecloud.com/")) {
@@ -157,7 +173,7 @@ public class Signing {
         //url = url.replaceAll("@", "%40");
         //url = url.replaceAll("\"","%22"); // encode double quotes (") in query parameters
 
-        log("DEBUG: Encoded URL2: " + url);
+        log("Encoded URL2: " + url);
 
         if (requestInfo.getMethod().equals("POST")) {
             request = new HttpPost(url);
@@ -194,7 +210,7 @@ public class Signing {
             }
         }
 
-        log("DEBUG: OLD HEADERS START");
+        log("*** OLD HEADERS START ***");
         // 'headers' includes the URL (e.g. GET, POST, etc.) as the first element
         String headerZero = headers.get(0); // save the URL for later
         headers.remove(0); // remove the URL (first element)
@@ -213,20 +229,20 @@ public class Signing {
                 request.addHeader(headerPair[0].trim(), headerPair[1].trim());
             }
         }
-        log("DEBUG: OLD HEADERS END");
+        log("*** OLD HEADERS END ***");
 
         signer.signRequest(request, header_name);
 
         // copy the HTTP headers from the signed request to newHeader
         List<String> newHeaders = new ArrayList<>();
         org.apache.http.Header[] tmpheaders = request.getAllHeaders();
-        log("DEBUG: NEW HEADERS START");
+        log("*** NEW HEADERS START ***");
         newHeaders.add(headerZero);
         for (org.apache.http.Header header : tmpheaders) {
             newHeaders.add(header.getName() + ": " + header.getValue());
             log(header.getName() + ": " + header.getValue());
         }
-        log("DEBUG: NEW HEADERS END");
+        log("*** NEW HEADERS END ***");
 
         return helpers.buildHttpMessage(newHeaders, body.getBytes());
     }
@@ -238,14 +254,17 @@ public class Signing {
      */
     static void log(String message) {
         if (DEBUG) {
-            callbacks.printOutput(message);
+            Format formatter = new SimpleDateFormat("HH:mm:ss");
+            String s = formatter.format(new Date());
+            String m = String.format("[%s] %s", s, message);
+            callbacks.printOutput(m);
         }
     }
 
     static void logError(String message) {
         Format formatter = new SimpleDateFormat("HH:mm:ss");
         String s = formatter.format(new Date());
-        String m = String.format("[%s]%s", s, message);
+        String m = String.format("[%s] %s", s, message);
         callbacks.printError(m);
     }
 
@@ -269,16 +288,61 @@ public class Signing {
     private static PrivateKey loadPrivateKey(String privateKeyFilename) {
         try (InputStream privateKeyStream = Files.newInputStream(Paths.get(privateKeyFilename))) {
             PrivateKey pk = PEM.readPrivateKey(privateKeyStream);
-            String msg = String.format("[DOM] Private key loaded: Algorithm is '%s' / Format is '%s' / File is '%s'.", pk.getAlgorithm(), pk.getFormat(), privateKeyFilename);
+            String msg = String.format("Private key loaded: Algorithm is '%s' / Format is '%s' / File is '%s'.", pk.getAlgorithm(), pk.getFormat(), privateKeyFilename);
             log(msg);
             return pk;
         } catch (InvalidKeySpecException e) {
-            logError("[DOM][ERROR] Invalid format for private key: " + e.getMessage());
+            logError("[ERROR] Invalid format for private key: " + e.getMessage());
             throw new RuntimeException("Invalid format for private key");
         } catch (IOException e) {
-            logError("[DOM][ERROR] Failed to load private key: " + e.getMessage());
+            logError("[ERROR] Failed to load private key: " + e.getMessage());
             throw new RuntimeException("Failed to load private key");
         }
+    }
+
+    private static boolean isKeyIdURL(String keyId) {
+        return keyId.toLowerCase(Locale.ROOT).startsWith("http");
+    }
+
+    private static X509Certificate loadKeyId(String keyId) {
+        X509Certificate cert;
+        String source;
+        try {
+            //Quick lookup on the cache
+            //Uses a cache to prevent to perform an HTTP request for each request to sign and reduce local IO
+            if (KEYID_CACHE.containsKey(keyId)) {
+                cert = KEYID_CACHE.get(keyId);
+                source = "cache";
+            } else {
+                InputStream is;
+                if (!isKeyIdURL(keyId)) {
+                    is = new ByteArrayInputStream(Files.readAllBytes(Paths.get(keyId)));
+                    source = "disk";
+                } else {
+                    try (HttpClient client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build()) {
+                        HttpRequest request = HttpRequest.newBuilder()
+                                .uri(new URI(keyId))
+                                .header("X-Origin", "BurpExtension-HTTPSignatures-loadKeyId()")
+                                .timeout(Duration.of(10, ChronoUnit.SECONDS))
+                                .GET()
+                                .build();
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        is = new ByteArrayInputStream(response.body().getBytes(StandardCharsets.UTF_8));
+                    }
+                    source = "network";
+                }
+                cert = (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(is);
+                KEYID_CACHE.put(keyId, cert);
+            }
+        } catch (Exception e) {
+            logError("[ERROR] Failed to load keyId: " + e.getMessage());
+            //If the certificate cannot be loaded then remove any cache entry related to it
+            KEYID_CACHE.remove(keyId);
+            throw new RuntimeException("Failed to load keyId");
+        }
+        String msg = String.format("Certificate loaded from %s: CN is '%s' / Location is '%s'.", source, cert.getSubjectX500Principal().getName(), keyId);
+        log(msg);
+        return cert;
     }
 
     /**
@@ -308,11 +372,16 @@ public class Signing {
             REQUIRED_HEADERS.put("put", stringToList(globalSettings.getString("Header Names to Sign: PUT").toLowerCase()));
             REQUIRED_HEADERS.put("post", stringToList(globalSettings.getString("Header Names to Sign: POST").toLowerCase()));
 
-            this.signers = REQUIRED_HEADERS
-                    .entrySet().stream()
-                    .collect(Collectors.toMap(
-                            entry -> entry.getKey(),
-                            entry -> buildSigner(apiKey, privateKey, entry.getKey())));
+            if (!ConfigSettings.SIGNATURE_MODE.equals(SignatureMode.JWS)) {
+                this.signers = REQUIRED_HEADERS
+                        .entrySet().stream()
+                        .collect(Collectors.toMap(
+                                entry -> entry.getKey(),
+                                entry -> buildSigner(apiKey, privateKey, entry.getKey())));
+            } else {
+                log("RFC 9421 HTTP Signature signers init skipped due to JWS signature mode enabled.");
+                this.signers = null;
+            }
         }
 
         /**
@@ -363,7 +432,7 @@ public class Signing {
          * @param header_name The header name for the signature
          */
         public void signRequest(HttpRequestBase request, String header_name) {
-            log("[DOM] Sign requests.");
+            log("Sign requests.");
             final String method = request.getMethod().toLowerCase();
             // nothing to sign for options
             if (method.equals("options")) {
@@ -413,8 +482,8 @@ public class Signing {
             }
 
             //If request is GET and the recent version of HTTP signature is used then add the digest of an empty string
-            if (method.equalsIgnoreCase("get") && ConfigSettings.SIGNATURE_ALGORITHM.equalsIgnoreCase("hs2019")) {
-                log("[DOM] Add the digest of an empty string.");
+            if (method.equalsIgnoreCase("get") && !ConfigSettings.SIGNATURE_MODE.equals(SignatureMode.RSASHA256)) {
+                log("Add the digest of an empty string.");
                 byte[] body = "".getBytes(StandardCharsets.UTF_8);
                 if (globalSettings.getString("Digest Header Name").toLowerCase().equals("x-content-sha256")) {
                     request.setHeader("x-content-sha256", calculateSHA256(body));
@@ -426,17 +495,16 @@ public class Signing {
             final Map<String, String> headers = extractHeadersToSign(request);
             String signature;
             if (ConfigSettings.SIGNATURE_MODE.equals(SignatureMode.JWS)) {
-                String digest;
-                if (request.getHeaders("digest").length > 0) {
-                    digest = request.getHeaders("digest")[0].getValue();
-                } else {
-                    digest = request.getHeaders("x-content-sha256")[0].getValue();
+                if (request.getHeaders("digest").length == 0) {
+                    String digest = request.getHeaders("x-content-sha256")[0].getValue();
+                    log("According to the 'openFinance API Framework Implementation Guidelines' document: The request header name must be called 'Digest' so add it to fix the missing.");
+                    request.setHeader("digest", digest);
                 }
-                signature = this.calculateJWSSignature(method, path, headers, digest);
+                signature = this.calculateJWSSignature(method, path, headers);
             } else {
                 signature = this.calculateSignature(method, path, headers);
             }
-            log("[DOM] Generated signature: " + signature);
+            log("Generated signature for signature mode '" + ConfigSettings.SIGNATURE_MODE + "': " + signature);
 
             if (header_name.equalsIgnoreCase("Signature") && signature.startsWith("Signature ")) {
                 // remove "Signature" from the beginning of the string as we use "Signature" as the header name
@@ -483,7 +551,7 @@ public class Signing {
                             header -> header,
                             header -> {
                                 if (!request.containsHeader(header)) {
-                                    logError(String.format("[DOM][ERROR] Expected one value for header '%s' ==> signature skipped!", header));
+                                    logError(String.format("[ERROR] Expected one value for header '%s' ==> signature skipped!", header));
                                     throw new MissingRequiredHeaderException(header);
                                 }
                                 if (request.getHeaders(header).length > 1) {
@@ -572,22 +640,58 @@ public class Signing {
 
         /**
          * Compute the JWS signature following the instructions<br>
-         * from the document "OpenFinance Framework - Implementation Guidelines - Protocol Functions and Security Measures".<br>
-         * See the section 6 of the document.
+         * from the document "openFinance Framework - Implementation Guidelines - Protocol Functions and Security Measures".<br>
+         * Version 2.1 from 31/07/2024.<br>
+         * See the section 6 of the document for the details about the signature.<br>
+         * <b>Note:</b>The implementation was made to be easy to read, understand, debug and modify based on usage context.
          *
          * @param method  Request method (GET, POST, ...)
          * @param path    The path + query string for forming the (request-target) pseudo-header
          * @param headers Headers to include in the signature.
-         * @param digest  Contains a Hash of the message body. If the message does not contain a body, it contain the hash of an empty byte list.
-         * @return The JWS token as string.
+         * @return The JWS signed object as string.
          * @see "https://www.berlin-group.org/openfinance-downloads"
          * @see "https://c2914bdb-1b7a-4d22-b792-c58ac5d6648e.usrfiles.com/ugd/c2914b_0bc6a7d6cd6641c5a4a430d09c50f2fd.pdf"
          * @see "https://medium.com/syntaxa-tech-blog/open-banking-message-signing-b4ab4f7f92d1"
          * @see "https://developer.revolut.com/docs/guides/build-banking-apps/tutorials/work-with-json-web-signatures"
          */
-        private String calculateJWSSignature(String method, String path, Map<String, String> headers, String digest) {
-            //@TODO: Implements me
-            throw new UnsupportedOperationException("Not yet implemented!");
+        private String calculateJWSSignature(String method, String path, Map<String, String> headers) {
+            try {
+                //Load crypto materials
+                String privateKeyFilename = globalSettings.getString("Private key file name and path");
+                PrivateKey privateKey = loadPrivateKey(privateKeyFilename);
+                String certificateLocation = globalSettings.getString("keyId");
+                Certificate certificate = loadKeyId(certificateLocation);
+                byte[] certificateHash = Base64.getDecoder().decode(calculateSHA256(certificate.getEncoded()));
+                //Format content
+                Map<String, Object> sigD = new HashMap<>();
+                List<String> pars = headers.keySet().stream().map(String::toLowerCase).collect(Collectors.toList());
+                sigD.put("pars", pars);
+                sigD.put("mid", "http://uri.etsi.org/19182/HttpHeaders");
+                String currentDateTimeUTC = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+                //Create the JWS token using the "customParam" directive, every time it is possible, to explicitly set elements defined into the spec
+                //and have a full control over the header created
+                JWSHeader.Builder builder = new JWSHeader.Builder(JWSAlgorithm.parse(ConfigSettings.SIGNATURE_ALGORITHM));
+                builder.type(JOSEObjectType.JOSE)
+                        .base64URLEncodePayload(false)
+                        .x509CertChain(List.of(Base64URL.encode(certificate.getEncoded())))
+                        .x509CertSHA256Thumbprint(Base64URL.encode(certificateHash))
+                        .criticalParams(Set.of("b64", "sigT", "sigD"))
+                        .customParam("sigT", currentDateTimeUTC)
+                        .customParam("sigD", sigD)
+                        .customParam("aud", String.format("%s %s", method.toUpperCase(Locale.ROOT), path));
+                if (isKeyIdURL(certificateLocation)) {
+                    builder.x509CertURL(new URI(certificateLocation));
+                }
+                JWSHeader jwsHeader = builder.build();
+                Payload jwsPayload = new Payload("");
+                JWSObject jwsObject = new JWSObject(jwsHeader, jwsPayload);
+                //Sign and return serialized JWS object
+                JWSSigner jwsSigner = new RSASSASigner(privateKey);
+                jwsObject.sign(jwsSigner);
+                return jwsObject.serialize();
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to generate signature", e);
+            }
         }
     }
 }

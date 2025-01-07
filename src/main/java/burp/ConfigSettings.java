@@ -27,9 +27,9 @@ public class ConfigSettings {
     JCheckBox checkBoxToolScanner = new JCheckBox("Scanner");
     JCheckBox checkBoxToolIntruder = new JCheckBox("Intruder");
     JCheckBox checkBoxToolRepeater = new JCheckBox("Repeater");
-    JCheckBox useHS2019Signature = new JCheckBox("HS2019");
-    JCheckBox useRSASHA256Signature = new JCheckBox("RSA-SHA256");
-    JCheckBox useJWSSignature = new JCheckBox("JSON Web Signature");
+    JCheckBox useHS2019Signature = new JCheckBox("RFC9421: HS2019");
+    JCheckBox useRSASHA256Signature = new JCheckBox("RFC9421: RSA-SHA256");
+    JCheckBox useJWSSignature = new JCheckBox("RFC7515: JSON Web Signature");
     private boolean tabChangeListenerLock = false;
 
     ConfigSettings() {
@@ -137,7 +137,7 @@ public class ConfigSettings {
             useJWSSignature.setSelected(false);
             ConfigSettings.SIGNATURE_MODE = SignatureMode.HS2019;
             ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
-            log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
+            log("Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
         }
         if ((Signing.callbacks.loadExtensionSetting("useRSASHA256Signature") != null) && Signing.callbacks.loadExtensionSetting("useRSASHA256Signature").equals("true")) {
             useRSASHA256Signature.setSelected(true);
@@ -145,7 +145,7 @@ public class ConfigSettings {
             useJWSSignature.setSelected(false);
             ConfigSettings.SIGNATURE_MODE = SignatureMode.RSASHA256;
             ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
-            log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
+            log("Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
         }
         if ((Signing.callbacks.loadExtensionSetting("useJWSSignature") != null) && Signing.callbacks.loadExtensionSetting("useJWSSignature").equals("true")) {
             useJWSSignature.setSelected(true);
@@ -153,7 +153,7 @@ public class ConfigSettings {
             useHS2019Signature.setSelected(false);
             ConfigSettings.SIGNATURE_MODE = SignatureMode.JWS;
             ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
-            log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
+            log("Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
         }
         useHS2019Signature.addItemListener(new ItemListener() {
             @Override
@@ -163,7 +163,7 @@ public class ConfigSettings {
                     ConfigSettings.this.useJWSSignature.setSelected(false);
                     ConfigSettings.SIGNATURE_MODE = SignatureMode.HS2019;
                     ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
-                    log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
+                    log("Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
                 }
             }
         });
@@ -175,7 +175,7 @@ public class ConfigSettings {
                     ConfigSettings.this.useJWSSignature.setSelected(false);
                     ConfigSettings.SIGNATURE_MODE = SignatureMode.RSASHA256;
                     ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
-                    log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
+                    log("Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
                 }
             }
         });
@@ -187,7 +187,7 @@ public class ConfigSettings {
                     ConfigSettings.this.useRSASHA256Signature.setSelected(false);
                     ConfigSettings.SIGNATURE_MODE = SignatureMode.JWS;
                     ConfigSettings.SIGNATURE_ALGORITHM = SIGNATURE_MODE.algorithm;
-                    log("[DOM] Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
+                    log("Signature algorithm set to " + ConfigSettings.SIGNATURE_ALGORITHM + ".");
                 }
             }
         });
@@ -353,6 +353,7 @@ public class ConfigSettings {
         profiles.put("ActiveKey", newProfile2);
         Signing.callbacks.saveExtensionSetting("ActiveKey", profileValues);
         Signing.callbacks.saveExtensionSetting("<ActiveTabName>", tabName);
+        log("Signature mode set to " + ConfigSettings.SIGNATURE_MODE);
     }
 
     /**
@@ -453,6 +454,8 @@ public class ConfigSettings {
             Signing.callbacks.saveExtensionSetting("useRSASHA256Signature", "false");
             Signing.callbacks.saveExtensionSetting("useHS2019Signature", "false");
         }
+        log("KeyId cache cleared.");
+        Signing.KEYID_CACHE.clear();
     }
 
     /**
@@ -609,5 +612,6 @@ public class ConfigSettings {
                 }
             }
         }
+        log("Signature mode set to " + ConfigSettings.SIGNATURE_MODE);
     }
 }

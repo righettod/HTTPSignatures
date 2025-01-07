@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="nimbusds.nimbus.jose.jwt" type="repository">
+    <properties maven-id="com.nimbusds:nimbus-jose-jwt:10.0.1" />
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/com/nimbusds/nimbus-jose-jwt/10.0.1/nimbus-jose-jwt-10.0.1.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
