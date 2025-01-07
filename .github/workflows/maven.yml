@@ -24,4 +24,4 @@ jobs:
         prerelease: false
         title: "Built from commit ${{ github.sha }}"
         files: |
-          target/HTTPSignatures.jar
+          target/HTTPSignatures-jar-with-dependencies.jar
