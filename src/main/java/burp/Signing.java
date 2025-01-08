@@ -46,6 +46,7 @@ public class Signing {
 
     static boolean DEBUG = false;
     static Map<String, X509Certificate> KEYID_CACHE = new ConcurrentHashMap<>();
+    static Map<String, PrivateKey> PRIVATEKEY_CACHE = new ConcurrentHashMap<>();
     public static IBurpExtenderCallbacks callbacks;
     public static IExtensionHelpers helpers;
     static ConfigSettings globalSettings;
@@ -286,22 +287,40 @@ public class Signing {
      * Load a {@link PrivateKey} from a file.
      */
     private static PrivateKey loadPrivateKey(String privateKeyFilename) {
-        try (InputStream privateKeyStream = Files.newInputStream(Paths.get(privateKeyFilename))) {
-            PrivateKey pk = PEM.readPrivateKey(privateKeyStream);
-            String msg = String.format("Private key loaded: Algorithm is '%s' / Format is '%s' / File is '%s'.", pk.getAlgorithm(), pk.getFormat(), privateKeyFilename);
-            log(msg);
-            return pk;
+        PrivateKey key;
+        String source;
+        try {
+            //Quick lookup on the cache
+            //Uses a cache to prevent to perform IO for each request to sign and reduce local IO
+            if (PRIVATEKEY_CACHE.containsKey(privateKeyFilename)) {
+                key = PRIVATEKEY_CACHE.get(privateKeyFilename);
+                source = "cache";
+            } else {
+                try (InputStream privateKeyStream = Files.newInputStream(Paths.get(privateKeyFilename))) {
+                    key = PEM.readPrivateKey(privateKeyStream);
+                    PRIVATEKEY_CACHE.put(privateKeyFilename, key);
+                    source = "disk";
+                }
+            }
         } catch (InvalidKeySpecException e) {
             logError("[ERROR] Invalid format for private key: " + e.getMessage());
+            //If the key cannot be loaded then remove any cache entry related to it
+            PRIVATEKEY_CACHE.remove(privateKeyFilename);
             throw new RuntimeException("Invalid format for private key");
         } catch (IOException e) {
             logError("[ERROR] Failed to load private key: " + e.getMessage());
+            //If the key cannot be loaded then remove any cache entry related to it
+            PRIVATEKEY_CACHE.remove(privateKeyFilename);
             throw new RuntimeException("Failed to load private key");
         }
+        String msg = String.format("Private key loaded from %s: Algorithm is '%s' / Format is '%s' / File is '%s'.", source, key.getAlgorithm(), key.getFormat(), privateKeyFilename);
+        log(msg);
+        return key;
     }
 
     private static boolean isKeyIdURL(String keyId) {
-        return keyId.toLowerCase(Locale.ROOT).startsWith("http");
+        String keyIdLowerCase = keyId.toLowerCase(Locale.ROOT);
+        return (keyIdLowerCase.startsWith("https://") || keyIdLowerCase.startsWith("http://"));
     }
 
     private static X509Certificate loadKeyId(String keyId) {
@@ -436,6 +455,7 @@ public class Signing {
             final String method = request.getMethod().toLowerCase();
             // nothing to sign for options
             if (method.equals("options")) {
+                log("Signing skipped because the request is an HTTP OPTIONS.");
                 return;
             }
 
@@ -481,10 +501,24 @@ public class Signing {
                 }
             }
 
-            //If request is GET and the recent version of HTTP signature is used then add the digest of an empty string
-            if (method.equalsIgnoreCase("get") && !ConfigSettings.SIGNATURE_MODE.equals(SignatureMode.RSASHA256)) {
+            //If request is GET/HEAD then add the digest of an empty string
+            if (method.equalsIgnoreCase("get") || method.equalsIgnoreCase("head")) {
                 log("Add the digest of an empty string.");
                 byte[] body = "".getBytes(StandardCharsets.UTF_8);
+                if (globalSettings.getString("Digest Header Name").toLowerCase().equals("x-content-sha256")) {
+                    request.setHeader("x-content-sha256", calculateSHA256(body));
+                } else {
+                    request.setHeader("digest", "SHA-256=" + calculateSHA256(body));
+                }
+            }
+
+            //Handle the case of the HTTP DELETE because such requests can have a body or not
+            if (method.equalsIgnoreCase("delete")) {
+                byte[] body = getRequestBody((HttpEntityEnclosingRequestBase) request);
+                if (body.length == 0) {
+                    log("Add the digest of an empty string.");
+                    body = "".getBytes(StandardCharsets.UTF_8);
+                }
                 if (globalSettings.getString("Digest Header Name").toLowerCase().equals("x-content-sha256")) {
                     request.setHeader("x-content-sha256", calculateSHA256(body));
                 } else {
@@ -504,7 +538,7 @@ public class Signing {
             } else {
                 signature = this.calculateSignature(method, path, headers);
             }
-            log("Generated signature for signature mode '" + ConfigSettings.SIGNATURE_MODE + "': " + signature);
+            log("Generated signature for signature mode '" + ConfigSettings.SIGNATURE_MODE + "':\n" + signature);
 
             if (header_name.equalsIgnoreCase("Signature") && signature.startsWith("Signature ")) {
                 // remove "Signature" from the beginning of the string as we use "Signature" as the header name

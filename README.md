@@ -8,6 +8,7 @@ This fork of the [original project](https://github.com/nccgroup/HTTPSignatures) 
 * Support for the signature using the algorithm **HS2019** of the [RFC9421](https://datatracker.ietf.org/doc/rfc9421/) `HTTP Message Signatures`.
 * Support for the signature using JSON Web Signature ([RFC7515](https://datatracker.ietf.org/doc/rfc7515/)) used by [OpenFinance](https://www.berlin-group.org/openfinance-downloads) (document `openFinance Framework - Implementation Guidelines - Protocol Functions and Security Measures`) .
 * Add more debug traces.
+* Use caching for the private key and its related X.509 certificate to reduce local IO for each request to sign.
 
 ## Burp support
 

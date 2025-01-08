@@ -34,9 +34,9 @@ public class ConfigSettings {
 
     ConfigSettings() {
         settings = new LinkedHashMap<>();
-        settings.put("Header Name", "e.g. Authorization, Signature");
-        settings.put("keyId", "e.g. https://example.com/user1, ocid1.tenancy.oc1.../ocid1.user.oc1.../{fingerprint}");
-        settings.put("Private key file name and path", "/home/${USER}/private_key.pem");
+        settings.put("Header Name", "e.g. authorization, signature, x-jws-signature");
+        settings.put("keyId", "e.g. https://example.com/cert_{fingerprint}.pem, /home/work/cert.pem");
+        settings.put("Private key file name and path", "/home/work/key.pem");
         settings.put("Digest Header Name", "e.g. x-content-sha256 or digest");
         settings.put("Header Names to Sign: GET", "date (request-target) host");
         settings.put("Header Names to Sign: HEAD", "date (request-target) host");
@@ -454,8 +454,9 @@ public class ConfigSettings {
             Signing.callbacks.saveExtensionSetting("useRSASHA256Signature", "false");
             Signing.callbacks.saveExtensionSetting("useHS2019Signature", "false");
         }
-        log("KeyId cache cleared.");
+        log("KeyId and private key caches cleared.");
         Signing.KEYID_CACHE.clear();
+        Signing.PRIVATEKEY_CACHE.clear();
     }
 
     /**

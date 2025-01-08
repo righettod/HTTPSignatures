@@ -19,7 +19,7 @@ public class BurpExtender implements IBurpExtender, IHttpListener {
                 Signing.callbacks.loadExtensionSetting("debug").equals("true") ) {
             Signing.DEBUG = true;
         }
-        Signing.log("Extension loaded.");
+        callbacks.printOutput("Extension loaded.");
     }
 
     /**
