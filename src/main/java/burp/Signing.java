@@ -697,6 +697,7 @@ public class Signing {
                 Certificate certificate = loadKeyId(certificateLocation);
                 byte[] certificateHash = Base64.getDecoder().decode(calculateSHA256(certificate.getEncoded()));
                 //Format content
+                String x5uOverrideURL = globalSettings.getString("Override JWS 'x5u' attribute with URL").trim();
                 Map<String, Object> sigD = new HashMap<>();
                 List<String> pars = headers.keySet().stream().map(String::toLowerCase).collect(Collectors.toList());
                 sigD.put("pars", pars);
@@ -715,6 +716,10 @@ public class Signing {
                         .customParam("aud", String.format("%s %s", method.toUpperCase(Locale.ROOT), path));
                 if (isKeyIdURL(certificateLocation)) {
                     builder.x509CertURL(new URI(certificateLocation));
+                }
+                if(!x5uOverrideURL.isBlank()){
+                    log("JWS header 'x5u' attribute overridden with value '" + x5uOverrideURL + "'.");
+                    builder.x509CertURL(new URI(x5uOverrideURL));
                 }
                 JWSHeader jwsHeader = builder.build();
                 Payload jwsPayload = new Payload("");

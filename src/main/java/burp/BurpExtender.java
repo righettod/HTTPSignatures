@@ -4,6 +4,7 @@ import javax.swing.*;
 
 public class BurpExtender implements IBurpExtender, IHttpListener {
     private IExtensionHelpers helpers;
+    private IBurpCollaboratorClientContext collaboratorClientContext;
 
     public void registerExtenderCallbacks (IBurpExtenderCallbacks callbacks) {
         new Signing(callbacks);

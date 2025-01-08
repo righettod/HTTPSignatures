@@ -52,7 +52,7 @@ public class ProfileTab extends JPanel {
 
         // current version (11 rows): Header, keyId, private key, digest, get, head, delete, put, post, query, port
         makeCompactGrid(this,
-                11, 2,    // rows, cols
+                configSettings.settings.size(), 2,    // rows, cols
                 6, 6, // initX, initY
                 6, 6);   // xPad, yPad
     }

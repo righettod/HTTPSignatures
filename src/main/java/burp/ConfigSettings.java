@@ -45,6 +45,7 @@ public class ConfigSettings {
         settings.put("Header Names to Sign: POST", "date (request-target) host content-length content-type digest");
         settings.put("Include query parameters in Signature", "true");
         settings.put("Include the port in Signature", "true");
+        settings.put("Override JWS 'x5u' attribute with URL", "e.g. https://evil.com/listener or empty");
 
         profiles = new LinkedHashMap<>();
 
@@ -316,12 +317,20 @@ public class ConfigSettings {
         if (result == JOptionPane.YES_OPTION) { // "Use this profile" button
             // Set this (selected) profile active
             setActiveProfile((ProfileTab) tabbedPane.getSelectedComponent());
-
         } else if (result == JOptionPane.CANCEL_OPTION) { // "Save" button
             // Save all tabs (profiles)
             saveProfiles();
+            checkPresenceOfActiveProfile();
+        } else if (result == JOptionPane.NO_OPTION) {
+            checkPresenceOfActiveProfile();
+        } // "Cancel" button
+    }
 
-        } // else if (result == JOptionPane.NO_OPTION) {} // "Cancel" button
+    private void checkPresenceOfActiveProfile() {
+        String activeTabName = Signing.callbacks.loadExtensionSetting("<ActiveTabName>");
+        if (activeTabName == null || !profiles.containsKey(activeTabName)) {
+            JOptionPane.showMessageDialog(null, "Don't forget to enable a profile to apply requests signature!", "Active Profile", JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     /**
