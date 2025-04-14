@@ -3,9 +3,12 @@ on:
   workflow_dispatch:
   push:
     branches: [ "main" ]
+permissions: read-all    
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      packages: write    
     steps:
     - uses: actions/checkout@v4
     - name: Set up JDK
