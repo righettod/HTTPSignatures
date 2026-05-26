@@ -717,7 +717,7 @@ public class Signing {
                 if (isKeyIdURL(certificateLocation)) {
                     builder.x509CertURL(new URI(certificateLocation));
                 }
-                if(!x5uOverrideURL.isBlank()){
+                if (!x5uOverrideURL.isBlank()) {
                     log("JWS header 'x5u' attribute overridden with value '" + x5uOverrideURL + "'.");
                     builder.x509CertURL(new URI(x5uOverrideURL));
                 }
@@ -728,6 +728,53 @@ public class Signing {
                 JWSSigner jwsSigner = new RSASSASigner(privateKey);
                 jwsObject.sign(jwsSigner);
                 return jwsObject.serialize();
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to generate signature", e);
+            }
+        }
+
+        private String calculateJWSSignatureStrictlyFollowingBGSpecifc(String method, String path, LinkedHashMap<String, String> headers) {
+            try {
+                String privateKeyFilename = globalSettings.getString("Private key file name and path");
+                PrivateKey privateKey = loadPrivateKey(privateKeyFilename);
+                String certificateLocation = globalSettings.getString("keyId");
+                Certificate certificate = loadKeyId(certificateLocation);
+
+                Map<String, Object> sigD = new LinkedHashMap<>();
+                List<String> pars = headers.keySet().stream().map(String::toLowerCase).collect(Collectors.toList());
+                sigD.put("pars", pars);
+                sigD.put("mId", "http://uri.etsi.org/19182/HttpHeaders"); // ← was "mid"
+                String sigT = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+                boolean certSpecifiedViaURL = false;
+                String x5uOverrideURL = globalSettings.getString("Override JWS 'x5u' attribute with URL").trim();
+                JWSHeader.Builder builder = new JWSHeader.Builder(JWSAlgorithm.parse(ConfigSettings.SIGNATURE_ALGORITHM))
+                        .type(JOSEObjectType.JOSE)
+                        .base64URLEncodePayload(false)
+                        .criticalParams(Set.of("b64", "sigT", "sigD"))
+                        .customParam("sigT", sigT)
+                        .customParam("sigD", sigD)
+                        .customParam("aud", method.toUpperCase(Locale.ROOT) + " " + path);
+                if (isKeyIdURL(certificateLocation)) {
+                    builder.x509CertURL(new URI(certificateLocation));
+                    certSpecifiedViaURL = true;
+                }
+                if (!x5uOverrideURL.isBlank()) {
+                    log("JWS header 'x5u' attribute overridden with value '" + x5uOverrideURL + "'.");
+                    builder.x509CertURL(new URI(x5uOverrideURL));
+                    certSpecifiedViaURL = true;
+                }
+                if (certSpecifiedViaURL) {
+                    byte[] certHash = MessageDigest.getInstance("SHA-256").digest(certificate.getEncoded());
+                    builder.x509CertSHA256Thumbprint(Base64URL.encode(certHash));
+                } else {
+                    builder.x509CertChain(List.of(Base64URL.encode(certificate.getEncoded())));
+                }
+                JWSHeader jwsHeader = builder.build();
+                String payloadString = headers.entrySet().stream().map(e -> e.getKey().toLowerCase(Locale.ROOT) + ": " + e.getValue().strip()).collect(Collectors.joining("\n"));
+                JWSObject jwsObject = new JWSObject(jwsHeader, new Payload(payloadString));
+                jwsObject.sign(new RSASSASigner(privateKey));
+                return jwsObject.serialize(true);
+
             } catch (Exception e) {
                 throw new RuntimeException("Failed to generate signature", e);
             }
