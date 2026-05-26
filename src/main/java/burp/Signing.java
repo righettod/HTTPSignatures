@@ -33,8 +33,6 @@ import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -535,6 +533,8 @@ public class Signing {
                     request.setHeader("digest", digest);
                 }
                 signature = this.calculateJWSSignature(method, path, headers);
+                //Use this to use the method that strictly follow the spec
+                //signature = this.calculateJWSSignatureStrictlyFollowingBGSpecifcation(method, path, headers);
             } else {
                 signature = this.calculateSignature(method, path, headers);
             }
@@ -733,7 +733,10 @@ public class Signing {
             }
         }
 
-        private String calculateJWSSignatureStrictlyFollowingBGSpecifc(String method, String path, LinkedHashMap<String, String> headers) {
+        /**.
+         * Same as method "calculateJWSSignature" but follow the BG specification AS IS.
+         */
+        private String calculateJWSSignatureStrictlyFollowingBGSpecifcation(String method, String path, Map<String, String> headers) {
             try {
                 String privateKeyFilename = globalSettings.getString("Private key file name and path");
                 PrivateKey privateKey = loadPrivateKey(privateKeyFilename);
