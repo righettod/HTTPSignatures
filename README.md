@@ -16,7 +16,7 @@ Tested with the version `2024.x` of [Burp Professional](https://portswigger.net/
 
 ## Release
 
-See [here](https://github.com/righettod/HTTPSignatures/releases) to download a build of the extension.
+See [here](https://github.com/righettod/HTTPSignatures/actions) to download a build of the extension (extension jar file is attached to the build job).
 
 ## Original README
 
