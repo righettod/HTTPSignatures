@@ -532,9 +532,12 @@ public class Signing {
                     log("According to the 'openFinance API Framework Implementation Guidelines' document: The request header name must be called 'Digest' so add it to fix the missing.");
                     request.setHeader("digest", digest);
                 }
+                //TODO: Select the implementation to use
                 signature = this.calculateJWSSignature(method, path, headers);
-                //Use this to use the method that strictly follow the spec
-                //signature = this.calculateJWSSignatureStrictlyFollowingBGSpecifcation(method, path, headers);
+                //Use this to use the method that strictly follow the BG specification
+                //signature = this.calculateJWSSignatureUsingStrictBGSpecifcation(method, path, headers);
+                //Use this to use the method that is a custom implementation of the BG specification
+                //signature = this.calculateJWSSignatureUsingCustomImplementation(method, path, headers);
             } else {
                 signature = this.calculateSignature(method, path, headers);
             }
@@ -733,10 +736,11 @@ public class Signing {
             }
         }
 
-        /**.
+        /**
+         * .
          * Same as method "calculateJWSSignature" but follow the BG specification AS IS.
          */
-        private String calculateJWSSignatureStrictlyFollowingBGSpecifcation(String method, String path, Map<String, String> headers) {
+        private String calculateJWSSignatureUsingStrictBGSpecifcation(String method, String path, Map<String, String> headers) {
             try {
                 String privateKeyFilename = globalSettings.getString("Private key file name and path");
                 PrivateKey privateKey = loadPrivateKey(privateKeyFilename);
@@ -782,5 +786,77 @@ public class Signing {
                 throw new RuntimeException("Failed to generate signature", e);
             }
         }
+
+        /**
+         * .
+         * Same as method "calculateJWSSignature" but using a custom implementation based on optional parameters defined in the BG specification.
+         */
+        private String calculateJWSSignatureUsingCustomImplementation(String method, String path, Map<String, String> headers) {
+            try {
+                String privateKeyFilename = globalSettings.getString("Private key file name and path");
+                PrivateKey privateKey = loadPrivateKey(privateKeyFilename);
+                String certificateLocation = globalSettings.getString("keyId");
+                loadKeyId(certificateLocation);//Just to validate that the certificate is valid
+                String x5uOverrideURL = globalSettings.getString("Override JWS 'x5u' attribute with URL").trim();
+
+                // Create the certificate claim based on the parameters defined
+                LinkedHashMap<String, String> customClaims = new LinkedHashMap<>();
+                if (!x5uOverrideURL.isBlank()) {
+                    customClaims.put("x5u", x5uOverrideURL);
+                } else if (isKeyIdURL(certificateLocation)) {
+                    customClaims.put("x5u", certificateLocation);
+                } else {
+                    String certContent = Files.readString(new File(certificateLocation).toPath());
+                    certContent = certContent.replace("-----BEGIN CERTIFICATE-----", "");
+                    certContent = certContent.replace(System.lineSeparator(), "");
+                    certContent = certContent.replace("-----END CERTIFICATE-----", "");
+                    certContent = certContent.trim();
+                    customClaims.put("x5c", certContent);
+                }
+                // Create the JSON representation of the custom claims
+                final String customParams = customClaims.entrySet().stream().map(e -> "  \"" + e.getKey() + "\": \"" + e.getValue() + "\"").collect(Collectors.joining(",\n"));
+
+                // sigD.pars: lowercased names of the signed HTTP headers ---
+                final String pars = headers.keySet().stream().map(String::toLowerCase).map(name -> "\"" + name + "\"").collect(Collectors.joining(","));
+                final String sigT = DateTimeFormatter.ISO_INSTANT.format(Instant.now().truncatedTo(ChronoUnit.SECONDS));
+
+                // Build the detached JWS protected header ---
+                final StringBuilder header = new StringBuilder("{\n");
+                header.append("  \"b64\": false,\n");
+                if (!customParams.isEmpty()) {
+                    header.append(customParams).append(",\n");
+                }
+                header.append("  \"crit\": [\n")
+                        .append("    \"sigT\",\n")
+                        .append("    \"sigD\",\n")
+                        .append("    \"b64\"\n")
+                        .append("  ],\n");
+                header.append("  \"sigT\": \"").append(sigT).append("\",\n");
+                header.append("  \"sigD\": {\n")
+                        .append("    \"pars\": [").append(pars).append("],\n")
+                        .append("    \"mId\": \"http://uri.etsi.org/19182/HttpHeaders\"\n")
+                        .append("  },\n");
+                header.append("  \"alg\": \"PS256\"\n");
+                header.append("}");
+                final String encodedHeader = Base64.getUrlEncoder().withoutPadding().encodeToString(header.toString().getBytes(StandardCharsets.UTF_8));
+
+                // Text to be signed: encodedHeader "." httpHeadersText
+                final String httpHeadersText = headers.entrySet().stream().map(e -> e.getKey().toLowerCase() + ": " + e.getValue()).collect(Collectors.joining("\n"));
+                final String toBeSigned = encodedHeader + "." + httpHeadersText;
+
+                // Sign with RSASSA-PSS (PS256) ---
+                final java.security.Signature signature = java.security.Signature.getInstance("RSASSA-PSS");
+                signature.setParameter(new PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, PSSParameterSpec.TRAILER_FIELD_BC));
+                signature.initSign(privateKey);
+                signature.update(toBeSigned.getBytes(StandardCharsets.UTF_8));
+                final String encodedSignature = Base64.getUrlEncoder().withoutPadding().encodeToString(signature.sign());
+
+                // Detached JWS: header ".." signature (empty payload segment) ---
+                return encodedHeader + ".." + encodedSignature;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to generate signature", e);
+            }
+        }
     }
 }
+
