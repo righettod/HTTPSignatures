@@ -738,7 +738,9 @@ public class Signing {
 
         /**
          * .
-         * Same as method "calculateJWSSignature" but follow the BG specification AS IS.
+         * Same as method "calculateJWSSignature" but follow the BG specification AS IS,<br>
+         * from the document "openFinance Framework - Implementation Guidelines - Protocol Functions and Security Measures".<br>
+         * Version 2.4 from 31/03/2026.<br>
          */
         private String calculateJWSSignatureUsingStrictBGSpecifcation(String method, String path, Map<String, String> headers) {
             try {
