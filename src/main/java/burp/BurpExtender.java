@@ -21,6 +21,7 @@ public class BurpExtender implements IBurpExtender, IHttpListener {
             Signing.DEBUG = true;
         }
         callbacks.printOutput("Extension loaded.");
+        callbacks.printOutput("Debug mode enabled: " + Signing.DEBUG);
     }
 
     /**

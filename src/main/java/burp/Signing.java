@@ -113,6 +113,7 @@ public class Signing {
 
         String url = requestInfo.getUrl().toString();
         log("\n\n\n\n[NEW REQUEST]");
+        log("Debug mode enabled: " + Signing.DEBUG);
         log("Input URL: " + url);
 
         String query = requestInfo.getUrl().getQuery();
@@ -533,11 +534,11 @@ public class Signing {
                     request.setHeader("digest", digest);
                 }
                 //TODO: Select the implementation to use
-                signature = this.calculateJWSSignature(method, path, headers);
+                //signature = this.calculateJWSSignature(method, path, headers);
                 //Use this to use the method that strictly follow the BG specification
                 //signature = this.calculateJWSSignatureUsingStrictBGSpecifcation(method, path, headers);
                 //Use this to use the method that is a custom implementation of the BG specification
-                //signature = this.calculateJWSSignatureUsingCustomImplementation(method, path, headers);
+                signature = this.calculateJWSSignatureUsingCustomImplementation(true, method, path, headers);
             } else {
                 signature = this.calculateSignature(method, path, headers);
             }
@@ -793,17 +794,23 @@ public class Signing {
          * .
          * Same as method "calculateJWSSignature" but using a custom implementation based on optional parameters defined in the BG specification.
          */
-        private String calculateJWSSignatureUsingCustomImplementation(String method, String path, Map<String, String> headers) {
+        private String calculateJWSSignatureUsingCustomImplementation(boolean useX5TClaimForCertificate, String method, String path, Map<String, String> headers) {
             try {
                 String privateKeyFilename = globalSettings.getString("Private key file name and path");
                 PrivateKey privateKey = loadPrivateKey(privateKeyFilename);
                 String certificateLocation = globalSettings.getString("keyId");
-                loadKeyId(certificateLocation);//Just to validate that the certificate is valid
+                Certificate certificate = loadKeyId(certificateLocation);
                 String x5uOverrideURL = globalSettings.getString("Override JWS 'x5u' attribute with URL").trim();
 
                 // Create the certificate claim based on the parameters defined
                 LinkedHashMap<String, String> customClaims = new LinkedHashMap<>();
-                if (!x5uOverrideURL.isBlank()) {
+                if (useX5TClaimForCertificate) {
+                    byte[] derEncoded = certificate.getEncoded();
+                    MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+                    byte[] hash = sha256.digest(derEncoded);
+                    String x5t = Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
+                    customClaims.put("x5t#S256", x5t);
+                } else if (!x5uOverrideURL.isBlank()) {
                     customClaims.put("x5u", x5uOverrideURL);
                 } else if (isKeyIdURL(certificateLocation)) {
                     customClaims.put("x5u", certificateLocation);
@@ -815,6 +822,7 @@ public class Signing {
                     certContent = certContent.trim();
                     customClaims.put("x5c", certContent);
                 }
+                log("Custom claims used => " + customClaims);
                 // Create the JSON representation of the custom claims
                 final String customParams = customClaims.entrySet().stream().map(e -> "  \"" + e.getKey() + "\": \"" + e.getValue() + "\"").collect(Collectors.joining(",\n"));
 
